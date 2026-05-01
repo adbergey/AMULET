@@ -29,7 +29,7 @@ Our approach demonstrates that carefully designed acoustic metastructures can en
 
 ### Models (`/models`)
 - **STL files** for all metastructure designs used in experiments  
-- Files are suitable for **direct 3D printing** (unless otherwise noted in future updates)
+- Files are suitable for **direct 3D printing** (100% infill, no support)
 
 ---
 
