@@ -1,4 +1,4 @@
-% ADB 2/20/2026
+% ADB 5/10/2026
 
 % This script will generate all of the experimental result plots from 
 % AMULET: Acoustic Metastructure for Direction-of-Arrival Estimation 
@@ -9,14 +9,14 @@
 clc
 clear
 close all
-tic
+
 %% Load in the data
 
 load("AMULET_Data.mat")
 
 % Setup 
-chirp_duration = 0.1;
-fs =  192000;
+chirp_duration = 0.1; %[s]
+fs =  192000;   %[Hz]
 f_start = 1000; %[Hz]
 f_stop = 88000; %[Hz]
 t = (0:1/fs:chirp_duration-1/fs)';
@@ -66,12 +66,16 @@ clim([0 1])
 
 %% Figure 8
 
+% Plot the longform example signatures to show distance invariance
 figure
 plot(abs(amulet_Data.pier_55cm_pressFit))
 hold on
 plot(abs(amulet_Data.pier_1m_pressFit))
 legend('55 cm Separation', '1 m Separation')
 title('Signatures are Distance Agnostic')
+
+% Note the initial spike is a direct EM crosstalk which serves as a
+% convienient example of synchronization
 
 
 %% Figure 9
@@ -107,7 +111,8 @@ goodness_score_noMS = zeros(numAngles,1);
 goodness_score_owlet = zeros(numAngles,1);
 goodness_score_amulet = zeros(numAngles,1);
 
-%Excluding the immediate neighbors up to diag_width, compute 
+%Excluding the immediate neighbors up to diag_width, compute the goodness
+%metric
 for i = 1:numAngles
     excludeInds = mod((i-diag_width-1:i+diag_width-1)+360,360)+1;
     inds = angles+1;
@@ -141,15 +146,70 @@ disp("AMULET-type Average Goodness Score of " + mean(db_score_amulet) + "dB")
 
 %% Figure 11(a) Design Variation
 
-% NOTE on Figure 11. To save time and line of code, the final numbers are
+% NOTE on Figure 11. To save time and lines of code, the final numbers are
 % precomputed. However the raw data is all included and an example of how
 % the numbers were computed is included.
 
+%{
+% Start of example section 
+
+%Specify and load in the datasets
+dataset1 = amulet_Data.air_slitSwirl1;
+dataset2 = amulet_Data.air_slitSwirl2;
 
 
+%Variable setup
+diag_width = 10; %How many elements each direction to extend beyond the MD
+goodness_score = zeros(numAngles,1);
+comp_mat = zeros(numAngles);
+match_scores = zeros(numAngles);
+errors = zeros(length(numAngles),1);
+predictions = zeros(length(numAngles),1);
 
 
+for u = 1 : numAngles
+    for c = 1 : numAngles
+        match_scores(u,c) = max(abs(xcorr(dataset1(:,c),dataset2(:,u))));
+    end
 
+    %Compare the prediciton to the theoretical 
+    target = angles(u);
+    [~, closeInd] = max(match_scores(u,:));
+    prediction = closeInd-1; %offset for 1-based indexing
+    
+    predictions(u) = prediction;
+    errors(u) = abs(wrapTo180(target-prediction));
+
+end
+
+disp("The average error is " + num2str(round(mean(errors),2)) + " degrees")
+
+
+%Compute the similarity score of each signature to its neighbors
+for i = 1:numAngles
+    for j = i:numAngles
+
+        temp_cor = abs(xcorr(dataset1(:,i),dataset1(:,j)));
+        comp_mat(i,j) = max(temp_cor);
+        comp_mat(j,i) = comp_mat(i,j);
+
+    end
+end
+
+
+%Excluding the immediate neighbors up to diag_width, compute the goodness 
+%metric 
+for i = 1:numAngles
+    excludeInds = mod((i-diag_width-1:i+diag_width-1)+360,360)+1;
+    inds = angles+1;
+    inds(excludeInds) = [];
+    goodness_score(i) = comp_mat(i,i)/mean(comp_mat(i,inds));
+end
+
+disp("The average goodness score is " + num2str(20*log10(mean(goodness_score))) + " dB")
+
+%End of example section
+%}  
 
 % Load in the precomputed results
 results = amulet_Data.design_variation;
@@ -318,6 +378,8 @@ ylabel('Lake Pier (Degrees)')
 colorbar
 clim([0 1])
 
+%To compute average error, use the same computation featured in Figure 11
+
 
 %% Figure 13(a)
 % NOTE: For simplicity all of the errors have already been computed for
@@ -457,7 +519,7 @@ end
 jumpthresh = 75;
 for i = 1:numChirps-1
     if abs(wrapTo180(predictions(i)-predictions(i+1))) > jumpthresh
-        %predictions(i+1) = predictions(i);
+        %predictions(i+1) = predictions(i);  %Uncomment to activate 
     end
 end
 
@@ -483,7 +545,9 @@ hold on
 % Compute the ground truth trajectory
 trackingT = 0:1/chirpsPerSec:numChirps/chirpsPerSec - 1/chirpsPerSec;
 
-grndTrthT = 5; %This initial point is equal to the time between starting the recording script and the movement script
+grndTrthT = 5; %This initial point is equal to the time between starting 
+% the recording script and the movement script so there is a bit of
+% variation that was manually accounted for
 grndTrth = pathTraveled(1);
 prevTime = grndTrthT;
 
@@ -519,7 +583,7 @@ pathTraveled = amulet_Data.saltwater_tracking_path5;
 ref_sigs = amulet_Data.coated_amulet_pier1;
 
 %Setup
-chirpsPerSec = fs/txNumSamps; %Ensure these numbers are accurate  %4.7OG
+chirpsPerSec = fs/txNumSamps; 
 degPerS = 1.41;
 
 keepLowerLimit = 25;
@@ -535,24 +599,20 @@ corWidth = keepUpperLimit+keepLowerLimit+1;
 
 corrOffset = 500;  %To ensure the entire peak is included
 
-
-%Manually set it, at least for initial testing
+%Manually set it for validation
 locs = 267165;
 firstCor = abs(cor(locs-corrOffset:locs+2*corrOffset));
-
 
 [pks1,locs1] = findpeaks(abs(firstCor),'MinPeakDistance', 60,'MinPeakHeight',0.5);
 
 
 firstCor = firstCor(locs1(1)-keepLowerLimit:locs1(1)+keepUpperLimit);
-
 startInd = lags(locs(1)-corrOffset+locs1(1)-keepLowerLimit);
 
 testChunk = trackSig(startInd:startInd+chirp_duration*fs-1);
 temp = xcorr(testChunk,TX_chirp);
 [pks1,locs1] = findpeaks(abs(temp),'MinPeakDistance', 60, 'MinPeakHeight',0.5);
 
-%corKeepRange = locs1(1)-keepLowerLimit:locs1(1)+keepUpperLimit;
 corKeepRange = 19200:19350;
 
 %Setup variables
@@ -646,7 +706,6 @@ disp("The average angular error is " + num2str(round(mean(abs(errors)),2)) + " d
 normUpperIRs = amulet_Data.simul_upperFreqs_IRs;
 normLowerIRs = amulet_Data.simul_lowerFreqs_IRs;
 trackSig = amulet_Data.pier_simulTracking;
-%trackSig = rxSig;
 
 %Specify the chirp parameters
 fStart = 1000;
@@ -662,8 +721,7 @@ singleChirpT = (0:1/fs:duration-1/fs)';
 singleChirp=chirp(singleChirpT,fStart,duration,fStop);
 
 %Parameters of the recording
-%txNumSamps = length(singleTX); %How many samples between start of consequtive TX chirps
-txNumSamps = 153600; 
+txNumSamps = 153600; %How many samples between start of consequtive TX chirps
 
 
 %Specify the density of calibration points
@@ -672,16 +730,14 @@ angles = 0:angleInc:360-angleInc;
 
 
 %Specify the ground truth path information
-pathTraveled = [0,180,160,180,160,180,0];
+pathTraveled = amulet_Data.saltwater_tracking_path5;
 
 
 waitSpots = [0];
 waitTime = 0;
 
-chirpsPerSec = fs/txNumSamps; %Ensure these numbers are accurate  %4.7OG
-%degPerS = 1.5*2.72/2/1.1;   %math says 1.59
+chirpsPerSec = fs/txNumSamps; 
 degPerS = 1.45; %1,
-%degPerS = 1.52; %3,2,4,8,9
 
 keepLowerLimit = 25;
 keepUpperLimit = 125;
@@ -689,39 +745,9 @@ corWidth = keepUpperLimit+keepLowerLimit+1;
 
 t = singleChirpT;
 
-%Define the normalized chirp
-p = [4.383e-09,-4.126e-05,0.1138]; %Obtained from real data
-normFunc = polyval(p,1:length(t));
-[minv,mini] = min(normFunc);
-normFunc(1:mini) = minv; %Set the minimum
-
-normChirp = singleChirp./normFunc';
-scaleFact = max(abs(normChirp));
-normChirp = normChirp./scaleFact;
-
-
-%Define the smooth start chirp signal
-startSig = cos(2*pi*t*fStart);
-stopSig = cos(2*pi*t*fStop);
-midSig = cos(2*pi*t*fMid);
-
-smoothStart = [startSig; singleChirp; stopSig];
-smoothStart1 = [startSig; singleChirp(1:length(singleChirp)/2); midSig];
-smoothStart2 = [midSig; singleChirp(length(singleChirp)/2:end); stopSig];
-
-%Define the normalized smooth start chirp signal
-normStartSig = startSig/minv/scaleFact;
-normStopSig = stopSig/normFunc(end)/scaleFact;
-normMidSig = midSig/scaleFact/normFunc(floor(length(normFunc)/2));
-normSmooth = [normStartSig; normChirp; normStopSig];
-
-normSmooth1 = [normStartSig; normChirp(1:length(singleChirp)/2); normMidSig];
-normSmooth2 = [normMidSig; normChirp(length(singleChirp)/2:end); normStopSig];
-
 
 % Identify the first correlation peak in the recording (used to align all
 % subsequent chirps)
-%temp = trackSig(85000:123400-1);
 temp = trackSig(1:48000);
 
 freqClearance = 6000;
@@ -738,11 +764,9 @@ chirpLower = singleChirp(1:length(singleChirp)/2);
 chirpUpper = singleChirp(length(singleChirp)/2:end);
 
 
-
-
+%For simplicity manually define the starting range
 corKeepRange = 64607:64768;
 startInd = 1;
-
 
 
 % Match the Chirps to Predict Angular Trajectory
@@ -758,7 +782,7 @@ predictions2=predictions1;
 
 
 %Compare with each point
-for u = 15 : numChirps-10 
+for u = 15 : numChirps-10 %Add in a brief offset to ensure both started and stopped
 
     testChirp = trackSig(startInd+(u-1)*txNumSamps:startInd+(u-1)*txNumSamps+48000-1);
     testFFT = fftshift(fft(testChirp));
@@ -766,13 +790,10 @@ for u = 15 : numChirps-10
     lowerFilt = ifft(ifftshift(testFFT.*mask1'));
 
     temp1 = xcorr(lowerFilt,chirpLower); %This expects to be honed in on IR
-    %[~,maxi1] = max(abs(temp1));
-    %testIR1 = temp1(maxi1-keepLowerLimit:maxi1+keepUpperLimit);
     testIR1 = temp1(corKeepRange);
     normTestIR1 = testIR1/sqrt(sum(testIR1.^2));
 
     temp2 = xcorr(upperFilt,chirpUpper); %This expects to be honed in on IR
-    %testIR2 = temp2(corKeepRange);
     [~,maxi2] = max(abs(temp2));
     testIR2 = temp2(maxi2-keepLowerLimit:maxi2+keepUpperLimit);
     normTestIR2 = testIR2/sqrt(sum(testIR2.^2));
@@ -826,10 +847,8 @@ end
 predictions2 = rad2deg(unwrap(deg2rad(predictions2)));
 
 
-
 %Plot the results
 trackingT = 0:1/chirpsPerSec:numChirps/chirpsPerSec-1/chirpsPerSec;
-
 
 figure
 plot(trackingT,predictions1)
@@ -861,7 +880,8 @@ plot(grndTrthT,grndTrth+37.3)
 
 gndTrthPts = interp1(grndTrthT,grndTrth,trackingT);
 
-errors1 = predictions1-gndTrthPts'-37.3;
+errors1 = predictions1-gndTrthPts'-37.3; %This 37.3 
+% is the ground truth offset between the two transmitters
 errors2 = predictions2-gndTrthPts';
 
 %Account for initial offset errors
@@ -873,8 +893,6 @@ upperFreqAvgEr = mean(abs(errors2));
 
 disp("The average error of the lower frequencies is " + num2str(round(lowerFreqAvgEr,1)) + " degrees")
 disp("The average error of the upper frequencies is " + num2str(round(upperFreqAvgEr,1)) + " degrees")
-
-
 
 
 %% Figure 15
@@ -990,7 +1008,6 @@ BWs = upperLims-lowerLims;
 
 upperBWInds = [1, length(upperLims):-1:numBWs+4];
 lowerBWInds = [4:numBWs, 1];
-
 
 
 %Generate output plots
@@ -1162,9 +1179,7 @@ for itsp = 1:length(interp_spacings)
     
     for u = 1 : numAngles
         for c = 1 : numAngles
-    
             interpMatchScores(u,c) = max(abs(xcorr(normInterpCaliIRs(:,c),test_signatures(:,u))));
-
         end
     
         %Compare the prediciton to the theoretical 
@@ -1177,7 +1192,6 @@ for itsp = 1:length(interp_spacings)
         interpErrors(u) = abs(wrapTo180(target-prediction));
     end
 
-
     overall_errors(itsp) = mean(abs(interpErrors));
 
 end
@@ -1187,5 +1201,3 @@ plot(interp_spacings,overall_errors)
 title('Average Error vs Interpolation Spacing')
 xlabel('Interpolation Spacing (Degrees)')
 ylabel('Average Error (Degrees)')
-
-toc
